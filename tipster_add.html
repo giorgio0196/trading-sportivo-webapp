@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Aggiungi a DB</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --tg-bg: #ffffff;
+    --tg-secondary-bg: #f0f0f4;
+    --tg-text: #0c0d0e;
+    --tg-hint: #8b8f96;
+    --tg-accent: #2ea6ff;
+    --tg-accent-text: #ffffff;
+    --tg-success: #2fb380;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: var(--tg-bg);
+    color: var(--tg-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  body {
+    display: flex; flex-direction: column;
+    min-height: 100vh;
+    padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    gap: 14px;
+  }
+
+  .pick-card {
+    background: var(--tg-secondary-bg);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .pick-card .match { font-size: 14.5px; font-weight: 600; line-height: 1.35; }
+  .pick-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .selection-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--tg-bg); border-radius: 8px; padding: 4px 9px;
+    font-size: 13px; font-weight: 600;
+  }
+  .market-hint { font-size: 12.5px; color: var(--tg-hint); }
+  .suggested { font-size: 12.5px; color: var(--tg-hint); }
+  .suggested b { color: var(--tg-text); font-variant-numeric: tabular-nums; }
+
+  .field-group { display: flex; flex-direction: column; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.02em;
+    color: var(--tg-hint); padding: 0 2px;
+  }
+  .field input {
+    width: 100%; border: none; border-radius: 12px;
+    background: var(--tg-secondary-bg); color: var(--tg-text);
+    font-size: 16px; padding: 13px 14px; font-family: inherit;
+    font-variant-numeric: tabular-nums; outline: none;
+    box-shadow: 0 0 0 0 transparent;
+    transition: box-shadow 0.15s ease;
+  }
+  .field input:focus { box-shadow: 0 0 0 2px var(--tg-accent); }
+  .field .diff-hint { font-size: 11.5px; color: var(--tg-hint); padding: 0 2px; }
+
+  .banca-hint {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12.5px; color: var(--tg-hint); padding: 2px 2px 0;
+  }
+  .banca-hint .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--tg-success); flex-shrink: 0; }
+  .banca-hint b { color: var(--tg-text); font-variant-numeric: tabular-nums; }
+
+  .fallback-btn {
+    margin-top: auto;
+    width: 100%; border: none; border-radius: 12px;
+    background: var(--tg-accent); color: var(--tg-accent-text);
+    font-size: 15.5px; font-weight: 600; padding: 14px;
+    font-family: inherit; cursor: pointer;
+  }
+  .fallback-btn:disabled { opacity: 0.45; cursor: default; }
+
+  .state-msg {
+    display: none;
+    flex: 1;
+    align-items: center; justify-content: center; text-align: center;
+    flex-direction: column; gap: 10px;
+  }
+  .state-msg.visible { display: flex; }
+  .state-check {
+    width: 52px; height: 52px; border-radius: 50%;
+    background: var(--tg-success); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
+  }
+  .state-title { font-size: 16px; font-weight: 600; }
+  .state-sub { font-size: 13px; color: var(--tg-hint); line-height: 1.5; max-width: 260px; }
+
+  .error-text { font-size: 12.5px; color: #e5484d; padding: 0 2px; display: none; }
+  .error-text.visible { display: block; }
+</style>
+</head>
+<body>
+
+  <div id="form-view">
+    <div class="pick-card">
+      <div class="match" id="f-match">⚽</div>
+      <div class="pick-row">
+        <span class="selection-pill" id="f-selection">🎯</span>
+        <span class="market-hint" id="f-market"></span>
+      </div>
+      <div class="suggested" id="f-suggested"></div>
+    </div>
+
+    <div class="field-group">
+      <div class="field">
+        <label for="f-odds">Quota usata</label>
+        <input id="f-odds" type="number" inputmode="decimal" step="0.01" min="1.01" placeholder="es. 1.85" />
+        <span class="diff-hint">Spesso diversa da quella suggerita dal tipster</span>
+      </div>
+      <div class="field">
+        <label for="f-date">Data della partita</label>
+        <input id="f-date" type="date" />
+      </div>
+    </div>
+
+    <div class="banca-hint" id="f-stakeline" style="display:none;"><span class="dot"></span></div>
+    <div class="error-text" id="f-error"></div>
+
+    <button class="fallback-btn" id="f-fallback-btn" type="button" disabled>Salva su DB</button>
+  </div>
+
+  <div class="state-msg" id="state-saving">
+    <div class="state-title">Salvataggio…</div>
+  </div>
+
+  <div class="state-msg" id="state-error">
+    <div class="state-title">Qualcosa non ha funzionato</div>
+    <div class="state-sub" id="state-error-sub">Riprova, o aggiungi la bet rispondendo direttamente al messaggio del pronostico.</div>
+  </div>
+
+<script>
+  var tg = window.Telegram && window.Telegram.WebApp;
+  if (tg) { tg.ready(); tg.expand(); }
+
+  // Colori dal tema Telegram dell'utente, con fallback per test fuori da Telegram.
+  var tp = (tg && tg.themeParams) || {};
+  var root = document.documentElement.style;
+  root.setProperty('--tg-bg', tp.bg_color || '#ffffff');
+  root.setProperty('--tg-secondary-bg', tp.secondary_bg_color || '#f0f0f4');
+  root.setProperty('--tg-text', tp.text_color || '#0c0d0e');
+  root.setProperty('--tg-hint', tp.hint_color || '#8b8f96');
+  root.setProperty('--tg-accent', tp.button_color || tp.link_color || '#2ea6ff');
+  root.setProperty('--tg-accent-text', tp.button_text_color || '#ffffff');
+
+  var params = new URLSearchParams(window.location.search);
+  var pickId = params.get('pick_id');
+  var match = params.get('match') || '';
+  var selection = params.get('selection') || '';
+  var market = params.get('market') || '';
+  var suggested = params.get('suggested');
+  var stake = params.get('stake');
+
+  document.getElementById('f-match').textContent = '⚽ ' + match;
+  document.getElementById('f-selection').textContent = '🎯 ' + selection;
+  document.getElementById('f-market').textContent = market;
+  document.getElementById('f-suggested').innerHTML = suggested
+    ? 'Quota suggerita: <b>' + suggested + '</b>' : '';
+  if (stake) {
+    var stakeEl = document.getElementById('f-stakeline');
+    stakeEl.style.display = 'flex';
+    stakeEl.innerHTML = '<span class="dot"></span>Puntata: <b>' + stake + '€</b> — 10% della banca corrente';
+  }
+
+  var oddsInput = document.getElementById('f-odds');
+  var dateInput = document.getElementById('f-date');
+  var errorEl = document.getElementById('f-error');
+  var fallbackBtn = document.getElementById('f-fallback-btn');
+
+  // Data di oggi come punto di partenza comodo, l'utente la cambia se serve.
+  dateInput.value = new Date().toISOString().slice(0, 10);
+
+  function isValid() {
+    var odds = parseFloat((oddsInput.value || '').replace(',', '.'));
+    return !isNaN(odds) && odds > 1 && !!dateInput.value;
+  }
+
+  function refreshValidity() {
+    var ok = isValid();
+    fallbackBtn.disabled = !ok;
+    if (tg) { ok ? tg.MainButton.enable() : tg.MainButton.disable(); }
+    errorEl.classList.remove('visible');
+  }
+
+  function showState(id) {
+    document.getElementById('form-view').style.display = 'none';
+    document.getElementById(id).classList.add('visible');
+  }
+
+  function submit() {
+    if (!isValid() || !pickId) {
+      errorEl.textContent = 'Inserisci una quota valida e una data.';
+      errorEl.classList.add('visible');
+      return;
+    }
+    var odds = parseFloat((oddsInput.value || '').replace(',', '.'));
+    var payload = { pick_id: pickId, odds: odds, match_date: dateInput.value };
+
+    if (tg && tg.sendData) {
+      showState('state-saving');
+      tg.MainButton.showProgress();
+      tg.sendData(JSON.stringify(payload));
+      // Telegram chiude la Web App subito dopo sendData — non serve gestire una risposta.
+    } else {
+      // Test fuori da Telegram: non c'è verso di inviare sendData, mostra solo il payload.
+      alert('Fuori da Telegram non posso salvare. Payload che verrebbe inviato:\n' + JSON.stringify(payload, null, 2));
+    }
+  }
+
+  if (tg) {
+    fallbackBtn.style.display = 'none';
+    tg.MainButton.setText('Salva su DB');
+    tg.MainButton.color = tp.button_color || '#2ea6ff';
+    tg.MainButton.textColor = tp.button_text_color || '#ffffff';
+    tg.MainButton.show();
+    tg.MainButton.disable();
+    tg.MainButton.onClick(submit);
+  } else {
+    fallbackBtn.addEventListener('click', submit);
+  }
+
+  oddsInput.addEventListener('input', refreshValidity);
+  dateInput.addEventListener('input', refreshValidity);
+  refreshValidity();
+</script>
+</body>
+</html>
