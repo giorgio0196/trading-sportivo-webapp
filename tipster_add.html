@@ -140,7 +140,11 @@
   </div>
 
 <script>
-  var tg = window.Telegram && window.Telegram.WebApp;
+  // L'SDK definisce window.Telegram.WebApp anche fuori da Telegram (è uno stub) — initData
+  // è vuoto lì e valorizzato solo dentro il client vero, è il modo giusto per distinguerli.
+  var tgRaw = window.Telegram && window.Telegram.WebApp;
+  var inTelegram = !!(tgRaw && tgRaw.initData);
+  var tg = inTelegram ? tgRaw : null;
   if (tg) { tg.ready(); tg.expand(); }
 
   // Colori dal tema Telegram dell'utente, con fallback per test fuori da Telegram.
