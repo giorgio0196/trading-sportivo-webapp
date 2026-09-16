@@ -98,6 +98,22 @@
 
   .error-text { font-size: 12.5px; color: #e5484d; padding: 0 2px; display: none; }
   .error-text.visible { display: block; }
+
+  .saved-recap {
+    margin-top: 6px;
+    background: var(--tg-secondary-bg);
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 13px;
+    text-align: left;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .saved-recap .row { display: flex; justify-content: space-between; gap: 10px; }
+  .saved-recap .row span:first-child { color: var(--tg-hint); }
+  .saved-recap .row span:last-child { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
 </style>
 </head>
 <body>
@@ -134,9 +150,16 @@
     <div class="state-title">Salvataggio…</div>
   </div>
 
+  <div class="state-msg" id="state-saved">
+    <div class="state-check">✓</div>
+    <div class="state-title">Salvata su DB</div>
+    <div class="state-sub">Ti chiederò l'esito il giorno dopo la partita.</div>
+    <div class="saved-recap" id="saved-recap"></div>
+  </div>
+
   <div class="state-msg" id="state-error">
-    <div class="state-title">Qualcosa non ha funzionato</div>
-    <div class="state-sub" id="state-error-sub">Riprova, o aggiungi la bet rispondendo direttamente al messaggio del pronostico.</div>
+    <div class="state-title" id="state-error-title">Qualcosa non ha funzionato</div>
+    <div class="state-sub" id="state-error-sub">Riprova, o aggiungi la bet da un altro messaggio del pronostico.</div>
   </div>
 
 <script>
@@ -201,6 +224,16 @@
     document.getElementById(id).classList.add('visible');
   }
 
+  // Nessuna chiave Supabase qui: la scrittura la fa questa Edge Function, che tiene la
+  // service_role key lato server. Evita di dover pubblicare una chiave che, su questo
+  // progetto, avrebbe accesso anche a tabelle con RLS disattivato (bets, matches, ...).
+  var ADD_BET_FUNCTION_URL = "https://uilnpkipmndbqmkvtsje.supabase.co/functions/v1/add-tipster-bet";
+
+  function showError(message) {
+    document.getElementById('state-error-sub').textContent = message;
+    showState('state-error');
+  }
+
   function submit() {
     if (!isValid() || !pickId) {
       errorEl.textContent = 'Inserisci una quota valida e una data.';
@@ -210,15 +243,34 @@
     var odds = parseFloat((oddsInput.value || '').replace(',', '.'));
     var payload = { pick_id: pickId, odds: odds, match_date: dateInput.value };
 
-    if (tg && tg.sendData) {
-      showState('state-saving');
-      tg.MainButton.showProgress();
-      tg.sendData(JSON.stringify(payload));
-      // Telegram chiude la Web App subito dopo sendData — non serve gestire una risposta.
-    } else {
-      // Test fuori da Telegram: non c'è verso di inviare sendData, mostra solo il payload.
-      alert('Fuori da Telegram non posso salvare. Payload che verrebbe inviato:\n' + JSON.stringify(payload, null, 2));
-    }
+    showState('state-saving');
+    if (tg) tg.MainButton.showProgress();
+
+    fetch(ADD_BET_FUNCTION_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+      .then(function (result) {
+        if (result.data && result.data.ok) {
+          var recap = document.getElementById('saved-recap');
+          recap.innerHTML =
+            '<div class="row"><span>Selezione</span><span>' + selection + '</span></div>' +
+            '<div class="row"><span>Quota</span><span>' + odds.toFixed(2) + '</span></div>' +
+            '<div class="row"><span>Data</span><span>' + dateInput.value.split('-').reverse().join('/') + '</span></div>' +
+            '<div class="row"><span>Puntata</span><span>' + result.data.stake + '€</span></div>';
+          showState('state-saved');
+          if (tg) { setTimeout(function () { tg.close(); }, 1600); }
+        } else if (result.data && result.data.already) {
+          showError('Questo pronostico era già stato aggiunto in precedenza.');
+        } else {
+          showError((result.data && result.data.error) || 'Errore del server, riprova tra poco.');
+        }
+      })
+      .catch(function () {
+        showError('Connessione fallita. Controlla di avere internet e riprova.');
+      });
   }
 
   if (tg) {
