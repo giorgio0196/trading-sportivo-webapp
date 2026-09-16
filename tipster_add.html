@@ -221,6 +221,7 @@
 
   function showState(id) {
     document.getElementById('form-view').style.display = 'none';
+    document.querySelectorAll('.state-msg').forEach(function (el) { el.classList.remove('visible'); });
     document.getElementById(id).classList.add('visible');
   }
 
